@@ -34,9 +34,9 @@ jobs:
 
       - name: Construir y publicar imagen Backend
         run: |
-          IMAGE="${DOCKERHUB_NAMESPACE}/${BACK_IMAGE}"
-          docker build \
-            -f backend/Dockerfile \
-            -t "${IMAGE}:${{ steps.tags.outputs.VERSION }}" \
-            backend
-          docker push "${IMAGE}:${{ steps.tags.outputs.VERSION }}"
+            IMAGE="${DOCKERHUB_NAMESPACE}/${BACK_IMAGE}"
+            docker build \
+              -f back-Ventas_SpringBoot/Springboot-API-REST/Dockerfile \
+              -t "${IMAGE}:${{ steps.tags.outputs.VERSION }}" \
+              back-Ventas_SpringBoot/Springboot-API-REST
+            docker push "${IMAGE}:${{ steps.tags.outputs.VERSION }}"

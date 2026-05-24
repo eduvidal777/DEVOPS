@@ -34,9 +34,9 @@ jobs:
 
       - name: Construir y publicar imagen Frontend
         run: |
-          IMAGE="${DOCKERHUB_NAMESPACE}/${FRONT_IMAGE}"
-          docker build \
-            -f frontend/Dockerfile \
-            -t "${IMAGE}:${{ steps.tags.outputs.VERSION }}" \
-            frontend
-          docker push "${IMAGE}:${{ steps.tags.outputs.VERSION }}"
+            IMAGE="${DOCKERHUB_NAMESPACE}/${FRONT_IMAGE}"
+            docker build \
+              -f front_despacho/Dockerfile \
+              -t "${IMAGE}:${{ steps.tags.outputs.VERSION }}" \
+              front_despacho
+            docker push "${IMAGE}:${{ steps.tags.outputs.VERSION }}"
