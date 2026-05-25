@@ -37,6 +37,36 @@ jobs:
           output=json
           EOF
 
+      - name: Validar instancia EC2 y SSM antes de desplegar
+        run: |
+          set -euo pipefail
+
+          echo "Checking EC2 instance state..."
+          STATE="$(aws ec2 describe-instances \
+            --region "${AWS_REGION}" \
+            --instance-ids "${BACKEND_INSTANCE_ID}" \
+            --query 'Reservations[0].Instances[0].State.Name' \
+            --output text)"
+
+          echo "Instance state: ${STATE}"
+          if [ "${STATE}" != "running" ]; then
+            echo "Instance must be 'running' to deploy via SSM. Current: ${STATE}"
+            exit 1
+          fi
+
+          echo "Checking SSM managed/online status..."
+          PING="$(aws ssm describe-instance-information \
+            --region "${AWS_REGION}" \
+            --filters "Key=InstanceIds,Values=${BACKEND_INSTANCE_ID}" \
+            --query 'InstanceInformationList[0].PingStatus' \
+            --output text || true)"
+
+          echo "SSM PingStatus: ${PING}"
+          if [ "${PING}" != "Online" ]; then
+            echo "Instance is not Online in SSM. Verify SSM Agent + IAM instance profile + network access."
+            exit 1
+          fi
+
       - name: Deploy backend por SSM (Comandos Docker directos)
         run: |
           aws ssm send-command \
