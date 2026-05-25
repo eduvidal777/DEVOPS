@@ -10,8 +10,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  FRONTEND_INSTANCE_ID: i-0a4dc8e99e0264bbc # REEMPLAZA CON EL ID DE TU INSTANCIA EC2
-  FRONTEND_APP_DIR: /home/ec2-user/tutorial-frontend
+  FRONTEND_INSTANCE_ID: i-0a4dc8e99e0264bbc # REEMPLAZA SI CAMBIA EL ID DE TU INSTANCIA EC2
 
 jobs:
   deploy:
@@ -38,14 +37,15 @@ jobs:
           output=json
           EOF
 
-      - name: Deploy frontend por SSM (docker compose)
+      - name: Deploy frontend por SSM (Comandos Docker directos)
         run: |
           aws ssm send-command \
             --region "${AWS_REGION}" \
             --document-name "AWS-RunShellScript" \
             --instance-ids "${FRONTEND_INSTANCE_ID}" \
             --parameters commands="[
-              \"cd ${FRONTEND_APP_DIR}\",
-              \"docker compose pull\",
-              \"docker compose up -d\"
+              \"docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-frontend:latest\",
+              \"docker stop frontend-app || true\",
+              \"docker rm frontend-app || true\",
+              \"docker run -d -p 80:80 --name frontend-app ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-frontend:latest\"
             ]"

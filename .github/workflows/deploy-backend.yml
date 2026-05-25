@@ -10,8 +10,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  BACKEND_INSTANCE_ID: i-00bcace9e71e29335 # REEMPLAZA CON EL ID DE TU INSTANCIA EC2
-  BACKEND_APP_DIR: /home/ec2-user/tutorial-backend
+  BACKEND_INSTANCE_ID: i-00bcace9e71e29335 # REEMPLAZA SI CAMBIA EL ID DE TU INSTANCIA EC2
 
 jobs:
   deploy:
@@ -38,14 +37,15 @@ jobs:
           output=json
           EOF
 
-      - name: Deploy backend por SSM (docker compose)
+      - name: Deploy backend por SSM (Comandos Docker directos)
         run: |
           aws ssm send-command \
             --region "${AWS_REGION}" \
             --document-name "AWS-RunShellScript" \
             --instance-ids "${BACKEND_INSTANCE_ID}" \
             --parameters commands="[
-              \"cd ${BACKEND_APP_DIR}\",
-              \"docker compose pull\",
-              \"docker compose up -d\"
+              \"docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-backend:latest\",
+              \"docker stop backend-app || true\",
+              \"docker rm backend-app || true\",
+              \"docker run -d -p 8080:8080 --name backend-app ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-backend:latest\"
             ]"
