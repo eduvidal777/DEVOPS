@@ -42,21 +42,19 @@ jobs:
           set -euo pipefail
           echo "Checking EC2 instance state..."
           STATE="$(aws ec2 describe-instances --region "${AWS_REGION}" --instance-ids "${BACKEND_INSTANCE_ID}" --query 'Reservations[0].Instances[0].State.Name' --output text)"
-          echo "Instance state: ${STATE}"
           if [ "${STATE}" != "running" ]; then
-            echo "Instance must be 'running' to deploy via SSM. Current: ${STATE}"
+            echo "Instance must be 'running' to deploy. Current: ${STATE}"
             exit 1
           fi
 
           echo "Checking SSM managed/online status..."
           PING="$(aws ssm describe-instance-information --region "${AWS_REGION}" --filters "Key=InstanceIds,Values=${BACKEND_INSTANCE_ID}" --query 'InstanceInformationList[0].PingStatus' --output text || true)"
-          echo "SSM PingStatus: ${PING}"
           if [ "${PING}" != "Online" ]; then
-            echo "Instance is not Online in SSM. Verify SSM Agent + IAM instance profile + network access."
+            echo "Instance is not Online in SSM."
             exit 1
           fi
 
-      - name: Deploy backend por SSM (Todo en uno automatizado)
+      - name: Deploy backend por SSM (Soporte Swagger + Red)
         run: |
           aws ssm send-command \
             --region "${AWS_REGION}" \
@@ -64,9 +62,8 @@ jobs:
             --instance-ids "${BACKEND_INSTANCE_ID}" \
             --parameters commands="[
               \"sudo docker network create ventas-net || true\",
-              \"sudo docker rm -f proyecto-db back-ventas back-despachos || true\",
-              \"sudo docker run -d --name proyecto-db --network ventas-net -p 3306:3306 -e MYSQL_ROOT_PASSWORD=admin123 -e MYSQL_DATABASE=ventasdb -v dbdata:/var/lib/mysql mysql:8\",
-              \"sleep 15\",
+              \"sudo docker rm -f back-ventas back-despachos || true\",
+              \"if [ \$(sudo docker ps -q -f name=proyecto-db) ]; then echo 'DB already running'; else sudo docker rm -f proyecto-db || true; sudo docker run -d --name proyecto-db --network ventas-net -p 3306:3306 -e MYSQL_ROOT_PASSWORD=admin123 -e MYSQL_DATABASE=ventasdb -v dbdata:/var/lib/mysql mysql:8; sleep 30; fi\",
               \"sudo docker run -d --name back-ventas --network ventas-net -p 8081:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend:latest\",
-              \"sudo docker run -d --name back-despachos --network ventas-net -p 8082:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend-despachos:latest\"
+              \"sudo docker run -d --name back-despachos --network ventas-net -p 8082:8081 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend-despachos:latest\"
             ]"
