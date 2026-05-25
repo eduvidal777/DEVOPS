@@ -3,7 +3,7 @@ name: Deploy Backend (AWS SSM)
 # EXIGENCIA RÚBRICA: Se activa automáticamente tras finalizar los procesos en la rama deploy
 on:
   workflow_run:
-    workflows: ["Build & Push Backend (Ventas)", "Build & Push Backend (Despachos)"]
+    workflows: ["Build & Push Backend (Ventas)", "Build & Push Backend (Despachos)."]
     types:
       - completed
 
