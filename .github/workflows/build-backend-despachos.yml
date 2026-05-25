@@ -20,7 +20,8 @@ jobs:
 
       - name: Compilar proyecto con Maven
         run: |
-          cd back-Despachos_SpringBoot
+          # Entramos a la carpeta principal y luego a la subcarpeta del proyecto
+          cd back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
           mvn clean package -DskipTests
 
       - name: Iniciar sesión en Docker Hub
@@ -32,7 +33,7 @@ jobs:
       - name: Construir y Publicar Imagen Docker
         uses: docker/build-push-action@v5
         with:
-          context: ./back-Despachos_SpringBoot
-          file: ./back-Despachos_SpringBoot/Dockerfile
+          context: ./back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
+          file: ./back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-backend-despachos:latest

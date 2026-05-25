@@ -20,7 +20,8 @@ jobs:
 
       - name: Compilar proyecto con Maven
         run: |
-          cd back-Ventas_SpringBoot
+          # Entramos a la carpeta principal y luego a la subcarpeta del proyecto
+          cd back-Ventas_SpringBoot/Springboot-API-REST-VENTA
           mvn clean package -DskipTests
 
       - name: Iniciar sesión en Docker Hub
@@ -32,7 +33,7 @@ jobs:
       - name: Construir y Publicar Imagen Docker
         uses: docker/build-push-action@v5
         with:
-          context: ./back-Ventas_SpringBoot
-          file: ./back-Ventas_SpringBoot/Dockerfile
+          context: ./back-Ventas_SpringBoot/Springboot-API-REST-VENTA
+          file: ./back-Ventas_SpringBoot/Springboot-API-REST-VENTA/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-backend:latest
