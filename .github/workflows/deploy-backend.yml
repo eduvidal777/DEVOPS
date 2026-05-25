@@ -13,7 +13,7 @@ env:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latests
     # IMPORTANTE: Solo se ejecuta si los dos builds anteriores terminaron EN VERDE (success)
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
@@ -39,17 +39,48 @@ jobs:
       - name: Validar instancia EC2 y SSM antes de desplegar
         run: |
           set -euo pipefail
-          echo "Checking EC2 instance state..."
-          STATE="$(aws ec2 describe-instances --region "${AWS_REGION}" --instance-ids "${BACKEND_INSTANCE_ID}" --query 'Reservations[0].Instances[0].State.Name' --output text)"
+
+          echo "===== DEBUG VARIABLES ====="
+          echo "REGION: ${AWS_REGION}"
+          echo "INSTANCE: ${BACKEND_INSTANCE_ID}"
+
+          echo "===== VALIDANDO EC2 ====="
+
+          aws ec2 describe-instances \
+            --region "${AWS_REGION}" \
+            --instance-ids "${BACKEND_INSTANCE_ID}" \
+            --output table
+
+          STATE=$(aws ec2 describe-instances \
+            --region "${AWS_REGION}" \
+            --instance-ids "${BACKEND_INSTANCE_ID}" \
+            --query 'Reservations[0].Instances[0].State.Name' \
+            --output text)
+
+          echo "Estado detectado: ${STATE}"
+
           if [ "${STATE}" != "running" ]; then
-            echo "Instance must be 'running' to deploy. Current: ${STATE}"
+            echo "ERROR: Instance must be running"
             exit 1
           fi
 
-          echo "Checking SSM managed/online status..."
-          PING="$(aws ssm describe-instance-information --region "${AWS_REGION}" --filters "Key=InstanceIds,Values=${BACKEND_INSTANCE_ID}" --query 'InstanceInformationList[0].PingStatus' --output text || true)"
+          echo "===== VALIDANDO SSM ====="
+
+          aws ssm describe-instance-information \
+            --region "${AWS_REGION}" \
+            --filters "Key=InstanceIds,Values=${BACKEND_INSTANCE_ID}" \
+            --output table
+
+          PING=$(aws ssm describe-instance-information \
+            --region "${AWS_REGION}" \
+            --filters "Key=InstanceIds,Values=${BACKEND_INSTANCE_ID}" \
+            --query 'InstanceInformationList[0].PingStatus' \
+            --output text || true)
+
+          echo "SSM Ping Status: ${PING}"
+
           if [ "${PING}" != "Online" ]; then
-            echo "Instance is not Online in SSM."
+            echo "ERROR: Instance is not online in SSM"
             exit 1
           fi
 
