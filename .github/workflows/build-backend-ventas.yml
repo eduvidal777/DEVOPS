@@ -7,6 +7,7 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+
     steps:
       - name: Descargar código del repositorio
         uses: actions/checkout@v4
@@ -20,12 +21,15 @@ jobs:
 
       - name: Compilar proyecto con Maven
         run: |
-          # Buscamos el archivo pom.xml sin importar el nombre exacto de la subcarpeta
-          POM_PATH=$(find back-Ventas_SpringBoot -name "pom.xml" -o -name "POM.xml" | head -n 1)
+          POM_PATH=$(find back-Ventas_SpringBoot -name "pom.xml" | head -n 1)
+
           if [ -z "$POM_PATH" ]; then
-            echo "Error: No se encontró ningún archivo pom.xml dentro de back-Ventas_SpringBoot" && exit 1
+            echo "No se encontró pom.xml"
+            exit 1
           fi
-          echo "Encontrado pom.xml en: $POM_PATH"
+
+          echo "POM encontrado en: $POM_PATH"
+
           mvn clean package -f "$POM_PATH" -DskipTests
 
       - name: Iniciar sesión en Docker Hub
@@ -37,9 +41,7 @@ jobs:
       - name: Construir y Publicar Imagen Docker
         uses: docker/build-push-action@v5
         with:
-          # Estrategia dinámica: El contexto es la raíz de la carpeta de ventas,
-          # y Docker busca el Dockerfile recursivamente en cualquier subcarpeta interna.
           context: ./back-Ventas_SpringBoot
-          file: ./back-Ventas_SpringBoot/**/Dockerfile
+          file: ./back-Ventas_SpringBoot/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-backend:latest
