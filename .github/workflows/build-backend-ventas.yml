@@ -21,16 +21,9 @@ jobs:
 
       - name: Compilar proyecto con Maven
         run: |
-          POM_PATH=$(find back-Ventas_SpringBoot -name "pom.xml" | head -n 1)
-
-          if [ -z "$POM_PATH" ]; then
-            echo "No se encontró pom.xml"
-            exit 1
-          fi
-
-          echo "POM encontrado en: $POM_PATH"
-
-          mvn clean package -f "$POM_PATH" -DskipTests
+          mvn clean package \
+          -f back-Ventas_SpringBoot/Springboot-API-REST/pom.xml \
+          -DskipTests
 
       - name: Iniciar sesión en Docker Hub
         uses: docker/login-action@v3
@@ -41,7 +34,7 @@ jobs:
       - name: Construir y Publicar Imagen Docker
         uses: docker/build-push-action@v5
         with:
-          context: ./back-Ventas_SpringBoot
-          file: ./back-Ventas_SpringBoot/Dockerfile
+          context: ./back-Ventas_SpringBoot/Springboot-API-REST
+          file: ./back-Ventas_SpringBoot/Springboot-API-REST/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-backend:latest
