@@ -10,7 +10,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  BACKEND_INSTANCE_ID: i-00bcace9e71e29335 # REEMPLAZA SI CAMBIA EL ID DE TU INSTANCIA EC2
+  BACKEND_INSTANCE_ID: i-00bcace9e71e29335 # Tu ID de instancia EC2 de Backend
 
 jobs:
   deploy:
@@ -40,14 +40,8 @@ jobs:
       - name: Validar instancia EC2 y SSM antes de desplegar
         run: |
           set -euo pipefail
-
           echo "Checking EC2 instance state..."
-          STATE="$(aws ec2 describe-instances \
-            --region "${AWS_REGION}" \
-            --instance-ids "${BACKEND_INSTANCE_ID}" \
-            --query 'Reservations[0].Instances[0].State.Name' \
-            --output text)"
-
+          STATE="$(aws ec2 describe-instances --region "${AWS_REGION}" --instance-ids "${BACKEND_INSTANCE_ID}" --query 'Reservations[0].Instances[0].State.Name' --output text)"
           echo "Instance state: ${STATE}"
           if [ "${STATE}" != "running" ]; then
             echo "Instance must be 'running' to deploy via SSM. Current: ${STATE}"
@@ -55,27 +49,24 @@ jobs:
           fi
 
           echo "Checking SSM managed/online status..."
-          PING="$(aws ssm describe-instance-information \
-            --region "${AWS_REGION}" \
-            --filters "Key=InstanceIds,Values=${BACKEND_INSTANCE_ID}" \
-            --query 'InstanceInformationList[0].PingStatus' \
-            --output text || true)"
-
+          PING="$(aws ssm describe-instance-information --region "${AWS_REGION}" --filters "Key=InstanceIds,Values=${BACKEND_INSTANCE_ID}" --query 'InstanceInformationList[0].PingStatus' --output text || true)"
           echo "SSM PingStatus: ${PING}"
           if [ "${PING}" != "Online" ]; then
             echo "Instance is not Online in SSM. Verify SSM Agent + IAM instance profile + network access."
             exit 1
           fi
 
-      - name: Deploy backend por SSM (Comandos Docker directos)
+      - name: Deploy backend por SSM (Todo en uno automatizado)
         run: |
           aws ssm send-command \
             --region "${AWS_REGION}" \
             --document-name "AWS-RunShellScript" \
             --instance-ids "${BACKEND_INSTANCE_ID}" \
             --parameters commands="[
-              \"docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-backend:latest\",
-              \"docker stop backend-app || true\",
-              \"docker rm backend-app || true\",
-              \"docker run -d -p 8080:8080 --name backend-app ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-backend:latest\"
+              \"sudo docker network create ventas-net || true\",
+              \"sudo docker rm -f proyecto-db back-ventas back-despachos || true\",
+              \"sudo docker run -d --name proyecto-db --network ventas-net -p 3306:3306 -e MYSQL_ROOT_PASSWORD=admin123 -e MYSQL_DATABASE=ventasdb -v dbdata:/var/lib/mysql mysql:8\",
+              \"sleep 15\",
+              \"sudo docker run -d --name back-ventas --network ventas-net -p 8081:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend:latest\",
+              \"sudo docker run -d --name back-despachos --network ventas-net -p 8082:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend-despachos:latest\"
             ]"

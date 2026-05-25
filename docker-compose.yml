@@ -11,29 +11,25 @@ services:
       - "3306:3306"
     volumes:
       - dbdata:/var/lib/mysql
+    restart: always
 
   backventas:
-    build: ./back-Ventas_SpringBoot/Springboot-API-REST
+    image: MirLuc/tutorial-ssm-backend:latest
     container_name: back-ventas
-
     environment:
       DB_ENDPOINT: db
       DB_PORT: 3306
       DB_NAME: ventasdb
       DB_USERNAME: root
       DB_PASSWORD: admin123
-
     ports:
       - "8081:8080"
-
     depends_on:
-      db:
-        condition: service_started
-
+      - db
     restart: always
 
   backdespachos:
-    build: ./back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
+    image: MirLuc/tutorial-ssm-backend-despachos:latest
     container_name: back-despachos
     environment:
       DB_ENDPOINT: db
@@ -42,21 +38,20 @@ services:
       DB_USERNAME: root
       DB_PASSWORD: admin123
     ports:
-      - "8082:8081"
+      - "8082:8080"
     depends_on:
-      db:
-        condition: service_started
-
+      - db
     restart: always
 
   frontend:
-    build: ./front_despacho
+    image: MirLuc/tutorial-ssm-frontend:latest
     container_name: front-despacho
     ports:
-      - "8080:80"
+      - "80:80"
     depends_on:
       - backventas
       - backdespachos
+    restart: always
 
 volumes:
   dbdata:
