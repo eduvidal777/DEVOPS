@@ -1,16 +1,18 @@
-name: ci_cd_frontend_ssm
+name: Deploy Backend (AWS SSM)
 
 on:
   push:
     branches: ["deploy"]
   workflow_run:
-    workflows: ["Build & Push Frontend (Docker Hub)"]
+    workflows:
+      - "Build & Push Backend Ventas (Docker Hub)"
+      - "Build & Push Backend Despachos (Docker Hub)"
     types:
       - completed
 
 env:
   AWS_REGION: us-east-1
-  FRONTEND_INSTANCE_ID: i-0a4dc8e99e0264bbc # REEMPLAZA SI CAMBIA EL ID DE TU INSTANCIA EC2
+  BACKEND_INSTANCE_ID: i-00bcace9e71e29335
 
 jobs:
   deploy:
@@ -18,8 +20,9 @@ jobs:
     if: |
       github.event_name == 'push' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+
     steps:
-      - name: Comprobar el código/repositorio
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Configurar AWS credentials (manual con session token)
@@ -37,15 +40,81 @@ jobs:
           output=json
           EOF
 
-      - name: Deploy frontend por SSM (Comandos Docker directos)
+      - name: Validar instancia EC2 y SSM antes de desplegar
         run: |
+          set -euo pipefail
+
+          echo "Checking EC2 instance state..."
+          STATE="$(aws ec2 describe-instances \
+            --region "${AWS_REGION}" \
+            --instance-ids "${BACKEND_INSTANCE_ID}" \
+            --query 'Reservations[0].Instances[0].State.Name' \
+            --output text)"
+
+          if [ "${STATE}" != "running" ]; then
+            echo "Instance must be 'running' to deploy. Current: ${STATE}"
+            exit 1
+          fi
+
+          echo "Checking SSM managed/online status..."
+          PING="$(aws ssm describe-instance-information \
+            --region "${AWS_REGION}" \
+            --filters "Key=InstanceIds,Values=${BACKEND_INSTANCE_ID}" \
+            --query 'InstanceInformationList[0].PingStatus' \
+            --output text || true)"
+
+          if [ "${PING}" != "Online" ]; then
+            echo "Instance is not Online in SSM."
+            exit 1
+          fi
+
+      - name: Deploy backend por SSM (Ventas + Despachos + MySQL)
+        run: |
+          set -euo pipefail
+
           aws ssm send-command \
             --region "${AWS_REGION}" \
             --document-name "AWS-RunShellScript" \
-            --instance-ids "${FRONTEND_INSTANCE_ID}" \
-            --parameters commands="[
-              \"docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-frontend:latest\",
-              \"docker stop frontend-app || true\",
-              \"docker rm frontend-app || true\",
-              \"docker run -d -p 80:80 --name frontend-app ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-frontend:latest\"
-            ]"
+            --instance-ids "${BACKEND_INSTANCE_ID}" \
+            --comment "Deploy backend containers via Docker" \
+            --parameters '{"commands":[
+              "set -euxo pipefail",
+
+              "echo \"=== Docker info ===\"",
+              "sudo docker --version",
+              "sudo docker ps -a || true",
+
+              "sudo docker network create ventas-net || true",
+
+              "echo \"=== Pulling images ===\"",
+              "sudo docker pull mirluc/tutorial-ssm-backend:latest",
+              "sudo docker pull mirluc/tutorial-ssm-backend-despachos:latest",
+
+              "echo \"=== Removing old backend containers ===\"",
+              "sudo docker rm -f back-ventas back-despachos || true",
+
+              "echo \"=== Ensuring MySQL is running ===\"",
+              "if sudo docker ps -a --format \"{{.Names}}\" | grep -q \"^proyecto-db$\"; then sudo docker start proyecto-db || true; else sudo docker run -d --restart unless-stopped --name proyecto-db --network ventas-net -p 3306:3306 -e MYSQL_ROOT_PASSWORD=admin123 -e MYSQL_DATABASE=ventasdb -v dbdata:/var/lib/mysql mysql:8; fi",
+
+              "echo \"=== Waiting for MySQL readiness ===\"",
+              "for i in $(seq 1 60); do if sudo docker exec proyecto-db mysqladmin ping -h 127.0.0.1 -padmin123 --silent; then echo \"MySQL ready\"; break; fi; echo \"MySQL not ready ($i/60)\"; sleep 2; if [ $i -eq 60 ]; then echo \"MySQL did not become ready\"; sudo docker logs --tail=200 proyecto-db || true; exit 1; fi; done",
+
+              "echo \"=== Starting back-ventas (8081 -> 8080) ===\"",
+              "sudo docker run -d --restart unless-stopped --name back-ventas --network ventas-net -p 8081:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 mirluc/tutorial-ssm-backend:latest",
+
+              "echo \"=== Starting back-despachos (8082 -> 8081) ===\"",
+              "sudo docker run -d --restart unless-stopped --name back-despachos --network ventas-net -p 8082:8081 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 mirluc/tutorial-ssm-backend-despachos:latest",
+
+              "echo \"=== Final status ===\"",
+              "sudo docker ps",
+              "sudo docker ps -a",
+
+              "echo \"=== Last logs back-ventas ===\"",
+              "sudo docker logs --tail=200 back-ventas || true",
+
+              "echo \"=== Last logs back-despachos ===\"",
+              "sudo docker logs --tail=200 back-despachos || true",
+
+              "echo \"=== Last logs proyecto-db ===\"",
+              "sudo docker logs --tail=200 proyecto-db || true"
+            ]}'

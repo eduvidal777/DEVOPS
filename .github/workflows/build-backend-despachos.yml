@@ -1,4 +1,4 @@
-name: Build & Push Backend Ventas (Docker Hub)
+name: Build & Push Backend Despachos (Docker Hub)
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
 
 env:
   DOCKERHUB_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
-  BACK_IMAGE: tutorial-ssm-backend
+  DESPACHOS_IMAGE: tutorial-ssm-backend-despachos
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -31,10 +31,10 @@ jobs:
           VERSION="1.0.${GITHUB_RUN_NUMBER}"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build and push (Ventas)
+      - name: Build and push (Despachos)
         run: |
-          IMAGE="${DOCKERHUB_NAMESPACE}/${BACK_IMAGE}"
-          cd back-Ventas_SpringBoot/Springboot-API-REST
+          IMAGE="${DOCKERHUB_NAMESPACE}/${DESPACHOS_IMAGE}"
+          cd back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
           docker build \
             -f Dockerfile \
             -t "${IMAGE}:${{ steps.tags.outputs.VERSION }}" \
