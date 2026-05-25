@@ -1,120 +1,115 @@
 name: Deploy Backend (AWS SSM)
 
 on:
-  push:
-    branches: ["deploy"]
   workflow_run:
-    workflows:
-      - "Build & Push Backend Ventas (Docker Hub)"
-      - "Build & Push Backend Despachos (Docker Hub)"
+    workflows: ["Build & Push Backend (Ventas)", "Build & Push Backend (Despachos)"]
     types:
       - completed
 
 env:
   AWS_REGION: us-east-1
-  BACKEND_INSTANCE_ID: i-00bcace9e71e29335
+  BACKEND_INSTANCE_ID: i-0efe3d2b107d42ade
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
-      - name: Checkout
+      - name: Comprobar código
         uses: actions/checkout@v4
 
-      - name: Configurar AWS credentials (manual con session token)
+      - name: Configurar AWS Credentials
         run: |
           mkdir -p ~/.aws
+
           cat > ~/.aws/credentials << EOF
           [default]
           aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws_session_token=${{ secrets.AWS_SESSION_TOKEN }}
           EOF
+
           cat > ~/.aws/config << EOF
           [default]
           region=${AWS_REGION}
           output=json
           EOF
 
-      - name: Validar instancia EC2 y SSM antes de desplegar
+      - name: Debug Variables
+        run: |
+          echo "AWS_REGION=${AWS_REGION}"
+          echo "BACKEND_INSTANCE_ID=${BACKEND_INSTANCE_ID}"
+
+      - name: Validar instancia EC2 y SSM
         run: |
           set -euo pipefail
 
-          echo "Checking EC2 instance state..."
-          STATE="$(aws ec2 describe-instances \
+          echo "===== VALIDANDO EC2 ====="
+
+          aws ec2 describe-instances \
+            --region "${AWS_REGION}" \
+            --instance-ids "${BACKEND_INSTANCE_ID}" \
+            --output table
+
+          STATE=$(aws ec2 describe-instances \
             --region "${AWS_REGION}" \
             --instance-ids "${BACKEND_INSTANCE_ID}" \
             --query 'Reservations[0].Instances[0].State.Name' \
-            --output text)"
+            --output text)
+
+          echo "Estado detectado: ${STATE}"
 
           if [ "${STATE}" != "running" ]; then
-            echo "Instance must be 'running' to deploy. Current: ${STATE}"
+            echo "ERROR: Instance must be running"
             exit 1
           fi
 
-          echo "Checking SSM managed/online status..."
-          PING="$(aws ssm describe-instance-information \
+          echo "===== VALIDANDO SSM ====="
+
+          aws ssm describe-instance-information \
+            --region "${AWS_REGION}" \
+            --filters "Key=InstanceIds,Values=${BACKEND_INSTANCE_ID}" \
+            --output table
+
+          PING=$(aws ssm describe-instance-information \
             --region "${AWS_REGION}" \
             --filters "Key=InstanceIds,Values=${BACKEND_INSTANCE_ID}" \
             --query 'InstanceInformationList[0].PingStatus' \
-            --output text || true)"
+            --output text || true)
+
+          echo "SSM Ping Status: ${PING}"
 
           if [ "${PING}" != "Online" ]; then
-            echo "Instance is not Online in SSM."
+            echo "ERROR: Instance is not online in SSM"
             exit 1
           fi
 
-      - name: Deploy backend por SSM (Ventas + Despachos + MySQL)
+      - name: Deploy Backend usando AWS SSM
         run: |
-          set -euo pipefail
-
           aws ssm send-command \
             --region "${AWS_REGION}" \
             --document-name "AWS-RunShellScript" \
             --instance-ids "${BACKEND_INSTANCE_ID}" \
-            --comment "Deploy backend containers via Docker" \
-            --parameters '{"commands":[
-              "set -euxo pipefail",
-
-              "echo \"=== Docker info ===\"",
-              "sudo docker --version",
-              "sudo docker ps -a || true",
+            --parameters commands='[
+              "mkdir -p /home/ec2-user/app",
+              "cd /home/ec2-user/app",
 
               "sudo docker network create ventas-net || true",
 
-              "echo \"=== Pulling images ===\"",
-              "sudo docker pull mirluc/tutorial-ssm-backend:latest",
-              "sudo docker pull mirluc/tutorial-ssm-backend-despachos:latest",
+              "sudo docker rm -f back-ventas back-despachos proyecto-db || true",
 
-              "echo \"=== Removing old backend containers ===\"",
-              "sudo docker rm -f back-ventas back-despachos || true",
+              "sudo docker run -d --name proyecto-db --network ventas-net -p 3306:3306 -e MYSQL_ROOT_PASSWORD=admin123 -e MYSQL_DATABASE=ventasdb -v dbdata:/var/lib/mysql mysql:8",
 
-              "echo \"=== Ensuring MySQL is running ===\"",
-              "if sudo docker ps -a --format \"{{.Names}}\" | grep -q \"^proyecto-db$\"; then sudo docker start proyecto-db || true; else sudo docker run -d --restart unless-stopped --name proyecto-db --network ventas-net -p 3306:3306 -e MYSQL_ROOT_PASSWORD=admin123 -e MYSQL_DATABASE=ventasdb -v dbdata:/var/lib/mysql mysql:8; fi",
+              "sleep 25",
 
-              "echo \"=== Waiting for MySQL readiness ===\"",
-              "for i in $(seq 1 60); do if sudo docker exec proyecto-db mysqladmin ping -h 127.0.0.1 -padmin123 --silent; then echo \"MySQL ready\"; break; fi; echo \"MySQL not ready ($i/60)\"; sleep 2; if [ $i -eq 60 ]; then echo \"MySQL did not become ready\"; sudo docker logs --tail=200 proyecto-db || true; exit 1; fi; done",
+              "sudo docker pull MirLuc/tutorial-ssm-backend:latest",
+              "sudo docker pull MirLuc/tutorial-ssm-backend-despachos:latest",
 
-              "echo \"=== Starting back-ventas (8081 -> 8080) ===\"",
-              "sudo docker run -d --restart unless-stopped --name back-ventas --network ventas-net -p 8081:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 mirluc/tutorial-ssm-backend:latest",
+              "sudo docker run -d --name back-ventas --network ventas-net -p 8081:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend:latest",
 
-              "echo \"=== Starting back-despachos (8082 -> 8081) ===\"",
-              "sudo docker run -d --restart unless-stopped --name back-despachos --network ventas-net -p 8082:8081 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 mirluc/tutorial-ssm-backend-despachos:latest",
+              "sudo docker run -d --name back-despachos --network ventas-net -p 8082:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend-despachos:latest",
 
-              "echo \"=== Final status ===\"",
-              "sudo docker ps",
-              "sudo docker ps -a",
-
-              "echo \"=== Last logs back-ventas ===\"",
-              "sudo docker logs --tail=200 back-ventas || true",
-
-              "echo \"=== Last logs back-despachos ===\"",
-              "sudo docker logs --tail=200 back-despachos || true",
-
-              "echo \"=== Last logs proyecto-db ===\"",
-              "sudo docker logs --tail=200 proyecto-db || true"
-            ]}'
+              "sudo docker ps -a"
+            ]'
