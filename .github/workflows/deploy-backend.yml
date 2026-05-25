@@ -54,16 +54,22 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy backend por SSM (Soporte Swagger + Puertos Corregidos)
+      - name: Deploy backend por SSM (Comandos robustos en cadena)
         run: |
           aws ssm send-command \
             --region "${AWS_REGION}" \
             --document-name "AWS-RunShellScript" \
             --instance-ids "${BACKEND_INSTANCE_ID}" \
-            --parameters commands="[
-              \"sudo docker network create ventas-net || true\",
-              \"sudo docker rm -f back-ventas back-despachos || true\",
-              \"if [ \$(sudo docker ps -q -f name=proyecto-db) ]; then echo 'DB already running'; else sudo docker rm -f proyecto-db || true; sudo docker run -d --name proyecto-db --network ventas-net -p 3306:3306 -e MYSQL_ROOT_PASSWORD=admin123 -e MYSQL_DATABASE=ventasdb -v dbdata:/var/lib/mysql mysql:8; sleep 30; fi\",
-              \"sudo docker run -d --name back-ventas --network ventas-net -p 8081:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend:latest\",
-              \"sudo docker run -d --name back-despachos --network ventas-net -p 8082:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend-despachos:latest\"
-            ]"
+            --parameters commands="
+              sudo docker network create ventas-net || true
+              sudo docker rm -f back-ventas back-despachos || true
+              if [ \$(sudo docker ps -q -f name=proyecto-db) ]; then
+                echo 'DB already running'
+              else
+                sudo docker rm -f proyecto-db || true
+                sudo docker run -d --name proyecto-db --network ventas-net -p 3306:3306 -e MYSQL_ROOT_PASSWORD=admin123 -e MYSQL_DATABASE=ventasdb -v dbdata:/var/lib/mysql mysql:8
+                sleep 25
+              fi
+              sudo docker run -d --name back-ventas --network ventas-net -p 8081:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend:latest
+              sudo docker run -d --name back-despachos --network ventas-net -p 8082:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend-despachos:latest
+            "
