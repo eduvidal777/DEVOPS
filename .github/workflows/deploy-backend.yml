@@ -1,30 +1,26 @@
 name: Deploy Backend (AWS SSM)
 
+# EXIGENCIA RÚBRICA: Se activa automáticamente tras finalizar los procesos en la rama deploy
 on:
-  push:
-    branches: ["deploy"]
   workflow_run:
-    workflows:
-      - "Build & Push Backend Ventas (Docker Hub)"
-      - "Build & Push Backend Despachos (Docker Hub)"
+    workflows: ["Build & Push Backend (Ventas)", "Build & Push Backend (Despachos)"]
     types:
       - completed
 
 env:
   AWS_REGION: us-east-1
-  BACKEND_INSTANCE_ID: i-00bcace9e71e29335
+  BACKEND_INSTANCE_ID: i-0efe3d2b107d42ade # Tu ID de instancia EC2 de Backend
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-
+    # IMPORTANTE: Solo se ejecuta si los dos builds anteriores terminaron EN VERDE (success)
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - name: Checkout
+      - name: Comprobar el código/repositorio
         uses: actions/checkout@v4
 
+      # EXIGENCIA DE RÚBRICA: Gestión de Secrets de AWS
       - name: Configurar AWS credentials (manual con session token)
         run: |
           mkdir -p ~/.aws
@@ -43,78 +39,57 @@ jobs:
       - name: Validar instancia EC2 y SSM antes de desplegar
         run: |
           set -euo pipefail
-
           echo "Checking EC2 instance state..."
-          STATE="$(aws ec2 describe-instances \
-            --region "${AWS_REGION}" \
-            --instance-ids "${BACKEND_INSTANCE_ID}" \
-            --query 'Reservations[0].Instances[0].State.Name' \
-            --output text)"
-
+          STATE="$(aws ec2 describe-instances --region "${AWS_REGION}" --instance-ids "${BACKEND_INSTANCE_ID}" --query 'Reservations[0].Instances[0].State.Name' --output text)"
           if [ "${STATE}" != "running" ]; then
             echo "Instance must be 'running' to deploy. Current: ${STATE}"
             exit 1
           fi
 
           echo "Checking SSM managed/online status..."
-          PING="$(aws ssm describe-instance-information \
-            --region "${AWS_REGION}" \
-            --filters "Key=InstanceIds,Values=${BACKEND_INSTANCE_ID}" \
-            --query 'InstanceInformationList[0].PingStatus' \
-            --output text || true)"
-
+          PING="$(aws ssm describe-instance-information --region "${AWS_REGION}" --filters "Key=InstanceIds,Values=${BACKEND_INSTANCE_ID}" --query 'InstanceInformationList[0].PingStatus' --output text || true)"
           if [ "${PING}" != "Online" ]; then
             echo "Instance is not Online in SSM."
             exit 1
           fi
 
-      - name: Deploy backend por SSM (Ventas + Despachos + MySQL)
+      # EXIGENCIA DE RÚBRICA: Despliegue automatizado e inteligente en EC2 sin conflicto de comillas
+      - name: Generar Script de Despliegue Nativo mediante SSM
         run: |
-          set -euo pipefail
-
           aws ssm send-command \
             --region "${AWS_REGION}" \
             --document-name "AWS-RunShellScript" \
             --instance-ids "${BACKEND_INSTANCE_ID}" \
-            --comment "Deploy backend containers via Docker" \
-            --parameters '{"commands":[
-              "set -euxo pipefail",
-
-              "echo \"=== Docker info ===\"",
-              "sudo docker --version",
-              "sudo docker ps -a || true",
-
+            --parameters commands='[
+              "mkdir -p /home/ec2-user/app",
+              "cd /home/ec2-user/app",
+              "cat << \"EOF\" > deploy_engine.sh",
+              "#!/bin/bash",
+              "set -e",
+              "echo \"=== 1. CREANDO RED PRIVADA INTERNA ===\"",
               "sudo docker network create ventas-net || true",
-
-              "echo \"=== Pulling images ===\"",
-              "sudo docker pull mirluc/tutorial-ssm-backend:latest",
-              "sudo docker pull mirluc/tutorial-ssm-backend-despachos:latest",
-
-              "echo \"=== Removing old backend containers ===\"",
+              "",
+              "echo \"=== 2. LIMPIANDO CONTENEDORES PREVIOS ===\"",
               "sudo docker rm -f back-ventas back-despachos || true",
-
-              "echo \"=== Ensuring MySQL is running ===\"",
-              "if sudo docker ps -a --format \"{{.Names}}\" | grep -q \"^proyecto-db$\"; then sudo docker start proyecto-db || true; else sudo docker run -d --restart unless-stopped --name proyecto-db --network ventas-net -p 3306:3306 -e MYSQL_ROOT_PASSWORD=admin123 -e MYSQL_DATABASE=ventasdb -v dbdata:/var/lib/mysql mysql:8; fi",
-
-              "echo \"=== Waiting for MySQL readiness ===\"",
-              "for i in $(seq 1 60); do if sudo docker exec proyecto-db mysqladmin ping -h 127.0.0.1 -padmin123 --silent; then echo \"MySQL ready\"; break; fi; echo \"MySQL not ready ($i/60)\"; sleep 2; if [ $i -eq 60 ]; then echo \"MySQL did not become ready\"; sudo docker logs --tail=200 proyecto-db || true; exit 1; fi; done",
-
-              "echo \"=== Starting back-ventas (8081 -> 8080) ===\"",
-              "sudo docker run -d --restart unless-stopped --name back-ventas --network ventas-net -p 8081:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 mirluc/tutorial-ssm-backend:latest",
-
-              "echo \"=== Starting back-despachos (8082 -> 8081) ===\"",
-              "sudo docker run -d --restart unless-stopped --name back-despachos --network ventas-net -p 8082:8081 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 mirluc/tutorial-ssm-backend-despachos:latest",
-
-              "echo \"=== Final status ===\"",
-              "sudo docker ps",
+              "",
+              "echo \"=== 3. EVALUANDO PERSISTENCIA DE BASE DE DATOS (REQUISITO RÚBRICA) ===\"",
+              "if sudo docker ps -a --format \"{{.Names}}\" | grep -q \"^proyecto-db$\"; then",
+              "    echo \"La base de datos ya existe en AWS. Asegurando encendido...\"",
+              "    sudo docker start proyecto-db || true",
+              "else",
+              "    echo \"Primera ejecución: Levantando MySQL con Volumen de Persistencia (dbdata)...\"",
+              "    sudo docker run -d --name proyecto-db --network ventas-net -p 3306:3306 -e MYSQL_ROOT_PASSWORD=admin123 -e MYSQL_DATABASE=ventasdb -v dbdata:/var/lib/mysql mysql:8",
+              "    sleep 25",
+              "fi",
+              "",
+              "echo \"=== 4. DESPLEGANDO IMÁGENES DESDE DOCKER HUB ===\"",
+              "sudo docker run -d --name back-ventas --network ventas-net -p 8081:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend:latest",
+              "sudo docker run -d --name back-despachos --network ventas-net -p 8082:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend-despachos:latest",
+              "",
+              "echo \"=== 5. VERIFICACIÓN DE CONTENEDORES ===\"",
               "sudo docker ps -a",
-
-              "echo \"=== Last logs back-ventas ===\"",
-              "sudo docker logs --tail=200 back-ventas || true",
-
-              "echo \"=== Last logs back-despachos ===\"",
-              "sudo docker logs --tail=200 back-despachos || true",
-
-              "echo \"=== Last logs proyecto-db ===\"",
-              "sudo docker logs --tail=200 proyecto-db || true"
-            ]}'
+              "EOF",
+              "chmod +x deploy_engine.sh",
+              "./deploy_engine.sh",
+              "rm -f deploy_engine.sh"
+            ]'

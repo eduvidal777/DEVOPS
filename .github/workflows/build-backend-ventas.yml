@@ -1,4 +1,4 @@
-name: Build & Push Backend (Despachos)
+name: Build & Push Backend (Ventas)
 
 # EXIGENCIA RÚBRICA: Disparador en la rama de despliegue
 on:
@@ -6,7 +6,7 @@ on:
     branches: ["deploy"]
 
 jobs:
-  build-and-push-despachos:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
       - name: Descargar código del repositorio
@@ -22,7 +22,7 @@ jobs:
 
       - name: Compilar proyecto con Maven (Ignorar Tests para agilizar)
         run: |
-          cd Springboot-API-REST-DESPACHO
+          cd Springboot-API-REST-VENTA
           mvn clean package -DskipTests
 
       # EXIGENCIA RÚBRICA: Gestión adecuada de Secrets y Registry (Docker Hub)
@@ -35,7 +35,7 @@ jobs:
       - name: Construir y Publicar Imagen Docker
         uses: docker/build-push-action@v5
         with:
-          context: ./Springboot-API-REST-DESPACHO
-          file: ./Springboot-API-REST-DESPACHO/Dockerfile
+          context: ./Springboot-API-REST-VENTA
+          file: ./Springboot-API-REST-VENTA/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-backend-despachos:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/tutorial-ssm-backend:latest
