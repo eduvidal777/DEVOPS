@@ -54,7 +54,7 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy backend por SSM (Soporte Swagger + Red)
+      - name: Deploy backend por SSM (Soporte Swagger + Puertos Corregidos)
         run: |
           aws ssm send-command \
             --region "${AWS_REGION}" \
@@ -65,5 +65,5 @@ jobs:
               \"sudo docker rm -f back-ventas back-despachos || true\",
               \"if [ \$(sudo docker ps -q -f name=proyecto-db) ]; then echo 'DB already running'; else sudo docker rm -f proyecto-db || true; sudo docker run -d --name proyecto-db --network ventas-net -p 3306:3306 -e MYSQL_ROOT_PASSWORD=admin123 -e MYSQL_DATABASE=ventasdb -v dbdata:/var/lib/mysql mysql:8; sleep 30; fi\",
               \"sudo docker run -d --name back-ventas --network ventas-net -p 8081:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend:latest\",
-              \"sudo docker run -d --name back-despachos --network ventas-net -p 8082:8081 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend-despachos:latest\"
+              \"sudo docker run -d --name back-despachos --network ventas-net -p 8082:8080 -e DB_ENDPOINT=proyecto-db -e DB_PORT=3306 -e DB_NAME=ventasdb -e DB_USERNAME=root -e DB_PASSWORD=admin123 MirLuc/tutorial-ssm-backend-despachos:latest\"
             ]"
