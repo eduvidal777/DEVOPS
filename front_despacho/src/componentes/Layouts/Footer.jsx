@@ -18,7 +18,7 @@ function Footer() {
               <h2 className="mb-6 text-sm font-semibold text-white uppercase dark:text-white">
                 Condiciones servicio
               </h2>
-              <ul className="text-white font-medium">
+              <ul className="text-gray font-medium">
                 <li className="mb-4">
                   <a href="#" className="hover:underline">
                     Recomendaciones embalaje
