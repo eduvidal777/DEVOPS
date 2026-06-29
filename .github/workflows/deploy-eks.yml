@@ -53,14 +53,19 @@ jobs:
         run: |
           aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER
 
-      - name: Aplicar manifiestos Kubernetes
+      - name: Validar y aplicar manifiestos Kubernetes
         run: |
-          kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/mysql.yaml
-          kubectl apply -f k8s/secret-db.yaml
-          kubectl apply -f k8s/back-ventas-deployment.yaml
-          kubectl apply -f k8s/back-despachos-deployment.yaml
-          kubectl apply -f k8s/front-despacho-deployment.yaml
+          set -euo pipefail
+
+          for f in k8s/namespace.yaml k8s/mysql.yaml k8s/secret-db.yaml \
+                   k8s/back-ventas-deployment.yaml k8s/back-despachos-deployment.yaml \
+                   k8s/front-despacho-deployment.yaml; do
+            echo "Validando $f"
+            test -s "$f" || { echo "ERROR: $f está vacío o no existe"; exit 1; }
+            kubectl apply --dry-run=client -f "$f" >/dev/null
+          done
+
+          kubectl apply -f k8s/
 
       - name: Reiniciar deployments
         run: |
