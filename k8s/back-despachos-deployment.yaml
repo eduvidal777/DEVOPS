@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: back-despachos
+  namespace: devops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: back-despachos
+  template:
+    metadata:
+      labels:
+        app: back-despachos
+    spec:
+      containers:
+        - name: back-despachos
+          image: 856519093406.dkr.ecr.us-east-1.amazonaws.com/back-despachos:eks-v1
+          ports:
+            - containerPort: 8081
+          envFrom:
+            - secretRef:
+                name: db-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: back-despachos
+  namespace: devops
+spec:
+  type: ClusterIP
+  selector:
+    app: back-despachos
+  ports:
+    - port: 8082
+      targetPort: 8081
