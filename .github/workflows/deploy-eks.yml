@@ -46,8 +46,8 @@ jobs:
       - name: Build y Push front-despacho
         run: |
           docker build -t front-despacho ./front_despacho
-          docker tag front-despacho:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/front-despacho:eks-v1
-          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/front-despacho:eks-v1
+          docker tag front-despacho:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/front-despacho:eks-v2
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/front-despacho:eks-v2
 
       - name: Conectar kubectl a EKS
         run: |

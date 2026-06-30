@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: front-despacho
-          image: 856519093406.dkr.ecr.us-east-1.amazonaws.com/front-despacho:eks-v1
+          image: 856519093406.dkr.ecr.us-east-1.amazonaws.com/front-despacho:eks-v2
           imagePullPolicy: Always
           ports:
             - containerPort: 80
