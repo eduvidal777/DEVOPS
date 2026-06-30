@@ -35,7 +35,7 @@ metadata:
   name: back-ventas
   namespace: devops
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     app: back-ventas
   ports:
