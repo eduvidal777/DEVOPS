@@ -8,7 +8,7 @@ export const TableCompras = () => {
 
   const compras = async () => {
     await axios
-        .get("http://localhost:8081/api/v1/ventas", {
+        .get("http://ab7171bf7f1f84ae1bcb88f4c3f8d12f-1073802299.us-east-1.elb.amazonaws.com:8081/api/v1/ventas", {
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",
